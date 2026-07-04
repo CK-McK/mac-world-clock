@@ -12,6 +12,10 @@ struct TimeZoneCatalogEntry: Identifiable, Hashable {
     let timeZoneIdentifier: String
     /// Geographic region used for grouped display (e.g. "Asia").
     let region: String
+    /// City latitude in decimal degrees (WGS84).
+    let latitude: Double
+    /// City longitude in decimal degrees (WGS84).
+    let longitude: Double
 
     /// Full display label combining city and country.
     var displayName: String {
@@ -40,10 +44,21 @@ struct TimeZoneCatalogEntry: Identifiable, Hashable {
     ///   - country: Country or territory name.
     ///   - timeZoneIdentifier: IANA timezone identifier.
     ///   - region: Region name for grouped lists.
-    init(city: String, country: String, timeZoneIdentifier: String, region: String) {
+    ///   - latitude: City latitude in decimal degrees.
+    ///   - longitude: City longitude in decimal degrees.
+    init(
+        city: String,
+        country: String,
+        timeZoneIdentifier: String,
+        region: String,
+        latitude: Double,
+        longitude: Double
+    ) {
         self.city = city
         self.country = country
         self.timeZoneIdentifier = timeZoneIdentifier
         self.region = region
+        self.latitude = latitude
+        self.longitude = longitude
     }
 }

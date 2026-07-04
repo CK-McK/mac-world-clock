@@ -3,15 +3,21 @@ import SwiftUI
 /// Main menu bar panel listing configured world clocks with a configure action.
 struct ExpandedClockView: View {
     @StateObject private var store = WorldClockStore()
+    @StateObject private var weatherService = WeatherService()
+    @StateObject private var temperatureUnit = TemperatureUnitPreferences()
     @State private var isShowingConfigure = false
 
-    private let panelWidth: CGFloat = 320
+    private let panelWidth: CGFloat = 380
     private let configurePanelWidth: CGFloat = 420
 
     var body: some View {
         Group {
             if isShowingConfigure {
-                ConfigureTimezonesView(store: store, onDismiss: closeConfigure)
+                ConfigureTimezonesView(
+                    store: store,
+                    temperatureUnit: temperatureUnit,
+                    onDismiss: closeConfigure
+                )
             } else {
                 mainPanel
             }
@@ -28,6 +34,14 @@ struct ExpandedClockView: View {
                 clockList
             }
 
+            if let allFailedMessage = weatherService.allFailedMessage {
+                Text(allFailedMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
+
             Divider()
                 .padding(.top, store.entries.isEmpty ? 12 : 4)
 
@@ -35,11 +49,18 @@ struct ExpandedClockView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        .onAppear {
+            weatherService.refreshIfNeeded(for: store.entries)
+        }
+        .onChange(of: store.entries) { entries in
+            weatherService.refreshIfNeeded(for: entries)
+        }
     }
 
     /// Returns from inline configure mode to the world-clock list without closing the panel.
     private func closeConfigure() {
         isShowingConfigure = false
+        weatherService.refreshIfNeeded(for: store.entries)
     }
 
     /// Scrollable list of configured cities with periodic live updates.
@@ -48,7 +69,12 @@ struct ExpandedClockView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(store.entries) { entry in
-                        CityRowView(entry: entry, date: context.date)
+                        CityRowView(
+                            entry: entry,
+                            date: context.date,
+                            weather: weatherService.snapshot(for: entry.id),
+                            temperatureUnit: temperatureUnit.unit
+                        )
                     }
                 }
                 .padding(.vertical, 4)

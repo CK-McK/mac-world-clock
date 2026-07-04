@@ -8,6 +8,7 @@ import SwiftUI
 /// even when the panel is closed without tapping Done.
 struct ConfigureTimezonesView: View {
     @ObservedObject var store: WorldClockStore
+    @ObservedObject var temperatureUnit: TemperatureUnitPreferences
 
     /// Called when the user cancels or finishes, returning to the world-clock list.
     var onDismiss: () -> Void
@@ -182,11 +183,13 @@ struct ConfigureTimezonesView: View {
         }
     }
 
-    /// Footer with launch-at-login toggle, backup actions, cancel, and done.
+    /// Footer with temperature units, launch-at-login toggle, backup actions, cancel, and done.
     private var footer: some View {
         VStack(spacing: 8) {
+            temperatureUnitPicker
             launchAtLoginToggle
             backupControls
+            openMeteoAttribution
 
             HStack {
                 Button("Cancel") {
@@ -230,6 +233,34 @@ struct ConfigureTimezonesView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Segmented picker for Celsius or Fahrenheit temperature display.
+    private var temperatureUnitPicker: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Temperature units")
+                .font(.subheadline)
+            Picker("Temperature units", selection: Binding(
+                get: { temperatureUnit.unit },
+                set: { temperatureUnit.setUnit($0) }
+            )) {
+                ForEach(TemperatureUnit.allCases) { unit in
+                    Text(unit.pickerLabel).tag(unit)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Temperature units")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Required Open-Meteo attribution for non-commercial weather data use.
+    private var openMeteoAttribution: some View {
+        Text("Weather data by Open-Meteo")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Toggle for registering the app as a login item via ``SMAppService/mainApp``.

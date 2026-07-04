@@ -1,11 +1,13 @@
 # Mac World Clock
 
-A lightweight native macOS **menu bar** app that shows a clock icon in the status area. Click it to open an expanded panel listing up to 10 configured cities with current local time and offset versus your Mac's timezone.
+A lightweight native macOS **menu bar** app that shows a clock icon in the status area. Click it to open an expanded panel listing up to 10 configured cities with current local time, weather, and offset versus your Mac's timezone.
 
 ## Features
 
 - Clock icon only in the menu bar (no Dock icon)
 - Click-to-open panel with live updating times
+- Per-city **current weather** (temperature + condition icon via [Open-Meteo](https://open-meteo.com/))
+- **°C / °F** temperature unit preference in the configure panel
 - Sun or moon icon beside each city's time (daytime 6 AM–6 PM local in that timezone)
 - Up to 10 cities from a curated catalog (~125 major cities)
 - Offset display vs your local time (e.g. `(+5h)`, `(-3h 30m)`, `(same time)`)
@@ -14,6 +16,7 @@ A lightweight native macOS **menu bar** app that shows a clock icon in the statu
 - **Launch at login** toggle in the configure panel (above Cancel / Done)
 - **Export / import** city list as JSON backup (configure panel footer)
 - Persists city selections immediately via UserDefaults (`worldClockEntries`); survives app restart
+- Weather refreshes when the panel opens (20-minute cache; no background polling when closed)
 
 ## Requirements
 
@@ -71,9 +74,10 @@ You can also drag `MacClockWidget.app` into the Login Items list.
 ## Usage
 
 1. Click the clock icon in the menu bar.
-2. View configured cities with live times, day/night icons, and offsets.
-3. Click **Configure…** (or press **⌘,**) to add, remove, or reorder cities (inline panel — stays open while editing). Changes save automatically; use **Cancel** to revert changes made since opening configure.
-4. Search the catalog by city, country, timezone identifier, or region.
+2. View configured cities with live times, weather (when online), day/night icons, and offsets.
+3. Click **Configure…** (or press **⌘,**) to add, remove, or reorder cities (inline panel — stays open while editing). Changes save automatically; use **Cancel** to revert city-list changes made since opening configure.
+4. In configure, choose **Celsius** or **Fahrenheit** under **Temperature units** — applies immediately and persists across sessions (not reverted by Cancel).
+5. Search the catalog by city, country, timezone identifier, or region.
 
 ### Backup and restore
 
@@ -106,7 +110,9 @@ Example backup shape:
 Mac Clock Widget/
 ├── Package.swift
 ├── README.md
-├── scripts/build-app.sh
+├── scripts/
+│   ├── build-app.sh
+│   └── generate-catalog-coords.py
 ├── Resources/Info.plist
 └── Sources/MacClockWidget/
     ├── MacClockWidgetApp.swift   # @main, MenuBarExtra
@@ -114,14 +120,20 @@ Mac Clock Widget/
     ├── Models/
     │   ├── WorldClockEntry.swift
     │   ├── WorldClockBackupDocument.swift
-    │   └── TimeZoneCatalogEntry.swift
+    │   ├── TimeZoneCatalogEntry.swift
+    │   ├── WeatherSnapshot.swift
+    │   └── TemperatureUnit.swift
     ├── Services/
     │   ├── WorldClockStore.swift
     │   ├── WorldClockBackupService.swift
     │   ├── LaunchAtLoginService.swift
-    │   └── TimeFormatting.swift
+    │   ├── TimeFormatting.swift
+    │   ├── WeatherService.swift
+    │   ├── WeatherCoordinateResolver.swift
+    │   ├── WeatherFormatting.swift
+    │   └── TemperatureUnitPreferences.swift
     ├── Data/
-    │   └── TimeZoneCatalog.swift   # 125 curated cities, 6 regions
+    │   └── TimeZoneCatalog.swift   # 125 curated cities with coordinates
     └── Views/
         ├── ExpandedClockView.swift
         ├── CityRowView.swift
@@ -136,6 +148,8 @@ Mac Clock Widget/
 - **Times look wrong:** Offsets account for daylight saving time at the current instant. Verify the correct IANA timezone was selected in Configure.
 - **12h vs 24h format:** Follows your macOS *System Settings → General → Language & Region* time format preference.
 - **Import failed:** Ensure the file is a World Clock JSON export (`schemaVersion: 1`) with valid IANA timezone identifiers. Raw `[WorldClockEntry]` arrays without the backup envelope are not supported.
+- **Weather not showing:** Requires network access to Open-Meteo. UTC rows never show weather. Rows omit weather while loading or when offline — times and offsets still update.
+- **Wrong temperature unit:** Change **Temperature units** in Configure; preference is stored in UserDefaults (`temperatureUnit`) and defaults from your locale on first launch.
 
 ## Notes
 
@@ -143,3 +157,5 @@ Mac Clock Widget/
 - Duplicate timezone IDs cannot be added twice.
 - Default cities on first launch: your local timezone, UTC, New York, London, and Tokyo (when available).
 - City selections persist in UserDefaults (`worldClockEntries`) and are written on every add, remove, or reorder — no separate Save step.
+- Weather data provided by [Open-Meteo](https://open-meteo.com/) (attribution shown in configure panel).
+- Temperature unit preference (`temperatureUnit`) persists independently of configure Cancel.

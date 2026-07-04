@@ -2,22 +2,24 @@
 
 ## Current status
 
-**v1 complete** — all planned features are implemented and buildable.
+**v2 complete** — weather display and temperature unit preference are implemented and buildable.
 
 | Area | Status |
 |------|--------|
 | Menu bar icon + click-to-open panel | Done |
 | Live clock list with offset vs local | Done |
 | Day/night sun/moon icon per timezone row | Done |
+| Per-city weather (Open-Meteo temp + condition icon) | Done |
+| °C / °F preference in configure panel | Done |
 | Inline configure (search, add/remove/reorder, max 10) | Done |
 | Immediate UserDefaults persistence | Done |
 | Launch at login (`SMAppService`, configure toggle) | Done |
 | Export / import city list as JSON backup | Done |
 | `.app` bundle script (`scripts/build-app.sh`) | Done |
 | README + build docs | Done |
-| Manual QA (DST, locale, persistence, login item) | Pending — not automated |
+| Manual QA (DST, locale, persistence, login item, weather offline) | Pending — not automated |
 
-**Stack:** Swift 5.9, SwiftUI, macOS 13+, SPM executable (no Xcode project). Bundle ID `com.cktools.macclockwidget`, display name **World Clock** (`Resources/Info.plist`).
+**Stack:** Swift 5.9, SwiftUI, macOS 13+, SPM executable (no Xcode project). Bundle ID `com.cktools.macclockwidget`, display name **World Clock** (`Resources/Info.plist` **2.0.0**).
 
 **Run:** `swift build -c release && .build/release/MacClockWidget` for dev; `./scripts/build-app.sh run` for `.app` + launch-at-login.
 
@@ -62,8 +64,10 @@ flowchart TB
 
     subgraph data [DataLayer]
         Store[WorldClockStore_UserDefaults]
-        CatalogData[TimezoneCatalog_static]
+        CatalogData[TimezoneCatalog_static_with_coords]
         Formatter[TimeFormatting]
+        WeatherLayer[WeatherService_OpenMeteo]
+        TempPrefs[TemperatureUnitPreferences]
     end
 
     Icon -->|click| List
@@ -73,6 +77,9 @@ flowchart TB
     Store --> List
     CatalogData --> Catalog
     Formatter --> List
+    WeatherLayer --> List
+    TempPrefs --> List
+    TempPrefs --> Configure
 ```
 
 ## Project layout
@@ -83,48 +90,68 @@ Mac Clock Widget/
 ├── README.md
 ├── Resources/
 │   └── Info.plist                # bundle metadata for build-app.sh (.app)
-├── scripts/build-app.sh          # wrap binary in .app bundle; install/run targets
+├── scripts/
+│   ├── build-app.sh              # wrap binary in .app bundle; install/run targets
+│   └── generate-catalog-coords.py  # one-time geocode helper for catalog lat/lon
 └── Sources/MacClockWidget/
     ├── MacClockWidgetApp.swift   # @main, MenuBarExtra, .accessory policy
     ├── AppDelegate.swift         # NSApp.setActivationPolicy(.accessory)
     ├── Models/
     │   ├── WorldClockEntry.swift       # id, displayName, timeZoneIdentifier
     │   ├── WorldClockBackupDocument.swift  # versioned JSON backup envelope
-    │   └── TimeZoneCatalogEntry.swift    # catalog row: city, country, tz id, region
+    │   ├── TimeZoneCatalogEntry.swift    # catalog row: city, country, tz id, region, lat/lon
+    │   ├── WeatherSnapshot.swift         # cached temp (°C) + WMO weather code
+    │   └── TemperatureUnit.swift         # celsius / fahrenheit display enum
     ├── Services/
     │   ├── WorldClockStore.swift         # load/save, enforce max 10, defaults
     │   ├── WorldClockBackupService.swift # export/import JSON via NSSavePanel/NSOpenPanel
     │   ├── LaunchAtLoginService.swift  # SMAppService.mainApp launch at login
-        │   └── TimeFormatting.swift          # time string, offset vs local, day/night
+    │   ├── TimeFormatting.swift          # time string, offset vs local, day/night
+    │   ├── WeatherService.swift            # Open-Meteo batch fetch + 20 min cache
+    │   ├── WeatherCoordinateResolver.swift # catalog coords + geocode fallback
+    │   ├── WeatherFormatting.swift         # WMO → SF Symbol, °C/°F display
+    │   └── TemperatureUnitPreferences.swift  # UserDefaults temperatureUnit key
     ├── Data/
-    │   └── TimeZoneCatalog.swift         # curated major cities per timezone
+    │   └── TimeZoneCatalog.swift         # 125 curated cities with coordinates
     └── Views/
-        ├── ExpandedClockView.swift       # main panel: list + configure button
-        ├── CityRowView.swift             # city, sun/moon, time, offset
-        └── ConfigureTimezonesView.swift    # searchable picker + reorder + remove
+        ├── ExpandedClockView.swift       # main panel: list + configure button (~380pt)
+        ├── CityRowView.swift             # city, weather, sun/moon, time, offset
+        └── ConfigureTimezonesView.swift    # searchable picker + °C/°F + reorder + remove
 ```
 
 ## Core behaviors
 
 ### 1. Menu bar item
 - `MenuBarExtra` with `Image(systemName: "clock")` label
-- `.menuBarExtraStyle(.window)` so click opens a fixed-size panel (~320×auto)
+- `.menuBarExtraStyle(.window)` so click opens a fixed-size panel (~380×auto)
 
 ### 2. Expanded panel (click)
 Each row shows:
 - **Primary label:** city + country (e.g. `London, United Kingdom`)
+- **Weather:** SF Symbol condition icon + temperature (e.g. `22°C`) when Open-Meteo data is available; omitted while loading or offline
 - **Day/night icon:** SF Symbol `sun.max.fill` (orange) or `moon.fill` (secondary) based on that timezone's local hour — daytime is 6:00–17:59 local (`TimeFormatting.isDaytime`)
 - **Time:** formatted with system locale preferences (12h/24h follows macOS settings via `DateFormatter`)
 - **Offset:** parenthesized difference vs local time, e.g. `(+5h)`, `(-3h 30m)`, or `(same time)`
 
 Example row:
 ```
-Tokyo, Japan          ☀ 9:08 PM  (+14h)
+Tokyo, Japan     🌧 22°C  ☀ 9:08 PM  (+14h)
 ```
 
+- Weather fetched via Open-Meteo when the panel opens; cache refreshes every **20 minutes** (not tied to the 1s clock timer). No background polling when panel is closed.
+- UTC rows skip weather (no meaningful single location).
 - Empty state when no cities configured: short message + prominent Configure button
 - **Configure…** opens inline panel; keyboard shortcut **⌘,** from main panel (`ExpandedClockView`)
 - Live updates via `TimelineView(.periodic(from:by: 1))` in the main panel (only while open — low CPU)
+- `ExpandedClockView` owns `@StateObject` `WeatherService` and `TemperatureUnitPreferences`; calls `refreshIfNeeded(for:)` on appear and when entries change
+
+### 2b. Weather (`WeatherService`, `WeatherCoordinateResolver`, `WeatherFormatting`)
+- **API:** Open-Meteo forecast (`https://api.open-meteo.com/v1/forecast`) — no API key; batch up to 10 cities in one request
+- **Coordinates:** Catalog `latitude`/`longitude` per city; `TimeZoneCatalog.entry(matching:)` prefers `displayName` over timezone ID. Non-catalog entries geocoded once via Open-Meteo search and cached in UserDefaults (`weatherCoordinateCache`)
+- **Storage:** Temperatures stored internally in **Celsius**; display converted via `TemperatureUnitPreferences`
+- **Cache:** 20-minute in-memory cache per entry UUID; refresh only when main panel visible
+- **Offline / error:** Row shows time + offset only; optional `"Weather unavailable"` caption when all rows fail
+- **Attribution:** `"Weather data by Open-Meteo"` caption in configure footer
 
 ### 3. Offset calculation (`TimeFormatting`)
 - Use `TimeZone.current` as local reference
@@ -138,11 +165,11 @@ Tokyo, Japan          ☀ 9:08 PM  (+14h)
 - **Configure** button at bottom of expanded panel switches the same `MenuBarExtra` window to inline configure mode (`ConfigureTimezonesView`) — **not** a separate sheet, so add/remove/reorder actions keep the panel open
 - **Done** or **Cancel** returns to the world-clock list; the panel stays open throughout configure interactions
 - **Cancel** restores the city list as it was when configure opened; **Done** simply closes configure (changes are already saved)
-- Panel width widens from ~320pt to **~420pt** while configure mode is active (`ExpandedClockView` toggles width; `ConfigureTimezonesView` uses a fixed 420×520 layout)
+- Panel width widens from ~380pt to **~420pt** while configure mode is active (`ExpandedClockView` toggles width; `ConfigureTimezonesView` uses a fixed 420×520 layout)
 - Layout (top to bottom):
   1. **Selected Cities** — persisted list with count badge (`N/10`), reorder via drag handles, swipe-to-delete, and per-row **X** remove buttons (`xmark.circle.fill`)
   2. **Add City** — prominent inline search field + region-grouped catalog list
-  3. **Footer** — **Launch at login** toggle, **Export…** / **Import…** backup buttons (JSON via system save/open panels), then **Cancel** (reverts to snapshot from panel open) and **Done** (dismiss configure)
+  3. **Footer** — **Temperature units** segmented picker (°C / °F), **Launch at login** toggle, **Export…** / **Import…** backup buttons, Open-Meteo attribution, then **Cancel** (reverts to snapshot from panel open) and **Done** (dismiss configure)
 - Features:
   - **Search** — inline `TextField` with magnifying glass above the catalog (reliable in menu bar panels; `.searchable` alone is omitted). Filters catalog by city, country, combined display name, IANA timezone identifier, and region using diacritic-insensitive `localizedStandardContains`. Clear button when text is non-empty. Empty-state message when no catalog rows match.
   - **Grouped list** by region (Americas, Europe, Africa, Asia, Oceania, Pacific) from catalog
@@ -161,13 +188,7 @@ Tokyo, Japan          ☀ 9:08 PM  (+14h)
 - **Feedback:** Caption under Export/Import buttons for success or error (same pattern as launch-at-login errors)
 
 ### 5. Timezone catalog (`TimeZoneCatalog.swift`)
-Static curated list of **125 cities** across **6 regions** (Americas, Europe, Africa, Asia, Oceania, Pacific) covering major cities/countries across IANA timezones, e.g.:
-- `America/New_York` → New York, United States
-- `Europe/London` → London, United Kingdom
-- `Asia/Tokyo` → Tokyo, Japan
-- `Australia/Sydney` → Sydney, Australia
-
-One representative city per timezone is enough for v1; multiple cities sharing a timezone can point to the same `timeZoneIdentifier`.
+Static curated list of **125 cities** across **6 regions** (Americas, Europe, Africa, Asia, Oceania, Pacific) covering major cities/countries across IANA timezones. Each entry includes **latitude** and **longitude** for weather lookup. Lookup helper `entry(matching:)` prefers exact `displayName` match, then timezone ID fallback.
 
 ### 6. Persistence (`WorldClockStore`)
 - **Storage:** `UserDefaults` key `worldClockEntries` — JSON-encoded `[WorldClockEntry]`
@@ -205,6 +226,12 @@ struct MacClockWidgetApp: App {
 - **`.app` bundle requirement:** `SMAppService` registers the main app bundle. Running the raw SPM binary (`.build/release/MacClockWidget`) is **not** a bundle — toggle is disabled with helper text. Use `scripts/build-app.sh` to produce `build/MacClockWidget.app` (bundle ID `com.cktools.macclockwidget`, ad-hoc signed) or `./scripts/build-app.sh install` for `/Applications`
 - **Package:** link `ServiceManagement` in `Package.swift` (`linkerSettings: .linkedFramework("ServiceManagement")`)
 
+### 9. Temperature unit preference (`TemperatureUnitPreferences`)
+- **Storage:** UserDefaults key `temperatureUnit` (`celsius` or `fahrenheit`)
+- **Default:** Inferred from `Locale.current.measurementSystem` on first launch (metric → Celsius, otherwise Fahrenheit)
+- **UI:** Segmented picker in configure footer above **Launch at login**; changes apply immediately (not reverted by **Cancel**)
+- **Display:** Cached Celsius weather values reformatted instantly on unit toggle; no refetch required
+
 ## Build and run
 
 ```bash
@@ -215,18 +242,20 @@ swift build -c release
 
 Optional `scripts/build-app.sh` to produce `MacClockWidget.app` for double-click launch. **Launch at login** (in-app toggle or System Settings Login Items) requires the `.app` bundle — see section 8.
 
-## UI polish (included in v1)
+## UI polish (included in v1/v2)
 
-- Main panel fixed width **~320pt**; configure mode widens to **~420pt**
+- Main panel fixed width **~380pt**; configure mode widens to **~420pt**
 - Native macOS spacing, dividers between sections
 - Inline configure panel:
   - Prominent rounded search field above the add-city catalog
   - `List` with `.inset` style, alternates row backgrounds
   - Selected Cities: reorder (`onMove`), swipe-delete (`onDelete`), and per-row X remove buttons
   - Catalog: region section headers, Add button / checkmark for selected rows
+  - Temperature units segmented picker above launch-at-login toggle
+  - Open-Meteo attribution caption in footer
   - Launch at login toggle above Cancel / Done footer; **⌘,** opens configure from main panel
 - Accessibility labels on remove buttons and catalog actions
-- City rows in main panel: accessibility labels for city, time, and offset
+- City rows in main panel: accessibility labels for city, weather, time, and offset
 
 ## Implementation notes
 
@@ -234,7 +263,10 @@ Optional `scripts/build-app.sh` to produce `MacClockWidget.app` for double-click
 |------|--------|
 | **Inline configure** | `ExpandedClockView` uses `@State isShowingConfigure` to swap between `mainPanel` and `ConfigureTimezonesView` inside the same `MenuBarExtra` window — no `.sheet` |
 | **Immediate persistence** | Configure mutates `WorldClockStore` directly; add/remove/reorder auto-save to UserDefaults. Cancel restores `entriesSnapshot` from panel open; Done dismisses without extra save |
-| **Panel sizing** | `ExpandedClockView` sets outer frame width (320 vs 420); `ConfigureTimezonesView` inner frame 420×520 |
+| **Panel sizing** | `ExpandedClockView` sets outer frame width (380 vs 420); `ConfigureTimezonesView` inner frame 420×520 |
+| **Weather** | `WeatherService` batch Open-Meteo fetch; 20 min cache; panel-open only; UTC skipped |
+| **Temperature unit** | `TemperatureUnitPreferences` key `temperatureUnit`; configure segmented picker; persists across Cancel |
+| **Catalog coords** | 125 entries with lat/lon; `scripts/generate-catalog-coords.py`; `entry(matching:)` displayName-first |
 | **List APIs** | macOS-native `List.onMove` / `List.onDelete` — no `EditMode` or iOS edit-button pattern |
 | **Remove UX** | Dual path: `xmark.circle.fill` borderless button per selected row + swipe-to-delete on the same list |
 | **Search** | `TimeZoneCatalog.filtered(by:)` delegates to `TimeZoneCatalogEntry.matchesSearch(_:)`; UI binding via `@State searchText` on inline `TextField` |
@@ -243,12 +275,15 @@ Optional `scripts/build-app.sh` to produce `MacClockWidget.app` for double-click
 | **Launch at login** | `LaunchAtLoginService` + `SMAppService.mainApp`; preference key `launchAtLoginEnabled` (default off); toggle in configure panel footer (not main panel); requires `.app` from `build-app.sh` |
 | **Backup JSON** | `WorldClockBackupService` + `WorldClockBackupDocument`; Export/Import in configure footer; `NSSavePanel` / `NSOpenPanel`; schema version 1 |
 
-## Out of scope for v1
+## Out of scope for v1/v2
 
 - Hover-to-open (per your preference: click only)
 - iCloud sync across Macs
 - Custom time formats (seconds, date line)
 - Widget / Notification Center extension
+- WeatherKit / paid weather APIs
+- Hourly or multi-day forecast
+- Per-row weather enable/disable toggle
 
 ## Implementation order
 
@@ -258,7 +293,8 @@ Optional `scripts/build-app.sh` to produce `MacClockWidget.app` for double-click
 4. **Configure inline panel** — search, add/remove/reorder, max-10 enforcement (stays within open `MenuBarExtra` window) — **done**
 5. **Launch at login** — `LaunchAtLoginService`, configure-panel toggle, `SMAppService.mainApp`, `.app` bundle docs — **done**
 6. **README** — build, run, launch at login, troubleshooting — **done**
-7. **Manual test** — verify DST offsets, 12h/24h locale, persistence across relaunch, login item registration via `.app` — **pending**
+7. **Weather + temperature units** — Open-Meteo batch fetch, catalog coords, °C/°F preference, row UI — **done**
+8. **Manual test** — verify DST offsets, 12h/24h locale, persistence across relaunch, login item registration via `.app`, weather online/offline — **pending**
 
 ## Key APIs (verified approach)
 
