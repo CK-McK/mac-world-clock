@@ -1,0 +1,25 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+
+# App bundle output
+build/
+
+# Xcode / macOS
+DerivedData/
+*.xcuserstate
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor / IDE (optional local)
+.idea/
+*.swp
+*~

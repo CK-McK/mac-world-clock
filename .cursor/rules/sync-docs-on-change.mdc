@@ -1,0 +1,40 @@
+---
+description: Keep plan.md and README.md in sync when code or config changes
+alwaysApply: true
+---
+
+# Sync documentation on every change
+
+After **any** implementation, refactor, bug fix, or config change in this project, update documentation **in the same session/PR** — not as a follow-up.
+
+## Required files
+
+| File | Keep accurate |
+|------|----------------|
+| `.sdd/specs/mac-world-clock/plan.md` | Current status, completed tasks, architecture notes, project layout, behaviors |
+| `README.md` | Setup, build/run, features, usage, project structure, troubleshooting |
+
+## Rules
+
+1. **Same session** — doc updates ship with the code change, not later.
+2. **Surgical edits only** — change sections affected by the work; do not rewrite unrelated content.
+3. **No extra markdown** — do not create other `.md` files unless essential.
+4. **Verify against code** — read changed source files before editing docs; do not guess.
+
+## plan.md checklist
+
+- **Current status** section reflects what is built vs pending.
+- Mark implementation-order items done when implemented.
+- Project layout lists actual paths (`Resources/Info.plist`, `AppDelegate.swift`, etc.).
+- UI labels match code (e.g. **Done**, not **Save**).
+
+## README.md checklist
+
+- Features and usage match current UI and behavior.
+- Build commands and `scripts/build-app.sh` subcommands stay accurate.
+- Project layout mirrors the repo.
+- Troubleshooting covers known constraints (e.g. launch-at-login requires `.app` bundle).
+
+## Example
+
+Changed `ConfigureTimezonesView` footer buttons → update plan.md configure-flow section **and** README usage if user-facing text changed.
