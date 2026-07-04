@@ -127,7 +127,7 @@ Mac Clock Widget/
 
 ### 2. Expanded panel (click)
 Each row shows:
-- **Primary label:** city + country (e.g. `London, United Kingdom`)
+- **Primary label:** city + country (e.g. `London, United Kingdom`); single line with tail truncation when the name exceeds available width
 - **Weather:** SF Symbol condition icon + temperature (e.g. `22°C`) when Open-Meteo data is available; omitted while loading or offline
 - **Day/night icon:** SF Symbol `sun.max.fill` (orange) or `moon.fill` (secondary) based on that timezone's local hour — daytime is 6:00–17:59 local (`TimeFormatting.isDaytime`)
 - **Time:** formatted with system locale preferences (12h/24h follows macOS settings via `DateFormatter`)

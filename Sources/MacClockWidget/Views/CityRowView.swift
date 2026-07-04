@@ -19,8 +19,9 @@ struct CityRowView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(entry.displayName)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
                 if let weather {
@@ -34,6 +35,7 @@ struct CityRowView: View {
                     .monospacedDigit()
             }
             .font(.body)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
