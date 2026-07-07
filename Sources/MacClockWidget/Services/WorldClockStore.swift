@@ -13,7 +13,7 @@ final class WorldClockStore: ObservableObject {
     /// UserDefaults key for persisted entries.
     private static let storageKey = "worldClockEntries"
 
-    /// Currently selected world clock entries in display order.
+    /// Currently selected world clock entries sorted alphabetically by ``WorldClockEntry/displayName``.
     @Published private(set) var entries: [WorldClockEntry] = []
 
     private let defaults: UserDefaults
@@ -31,6 +31,7 @@ final class WorldClockStore: ObservableObject {
     /// - Parameter newEntries: Desired entry list; truncated to ``maxEntries``.
     func setEntries(_ newEntries: [WorldClockEntry]) {
         entries = Array(newEntries.prefix(Self.maxEntries))
+        sortEntriesInPlace()
         save()
     }
 
@@ -49,6 +50,7 @@ final class WorldClockStore: ObservableObject {
             timeZoneIdentifier: catalogEntry.timeZoneIdentifier
         )
         entries.append(entry)
+        sortEntriesInPlace()
         save()
         return true
     }
@@ -58,21 +60,7 @@ final class WorldClockStore: ObservableObject {
     /// - Parameter ids: Entry UUIDs to remove.
     func remove(ids: Set<UUID>) {
         entries.removeAll { ids.contains($0.id) }
-        save()
-    }
-
-    /// Moves an entry from one index to another, updating persisted order.
-    ///
-    /// - Parameters:
-    ///   - source: Source index in the current entries array.
-    ///   - destination: Destination index in the entries array.
-    func move(from source: Int, to destination: Int) {
-        guard entries.indices.contains(source),
-              destination >= 0,
-              destination <= entries.count else { return }
-        let entry = entries.remove(at: source)
-        let adjustedDestination = destination > source ? destination - 1 : destination
-        entries.insert(entry, at: min(max(adjustedDestination, 0), entries.count))
+        sortEntriesInPlace()
         save()
     }
 
@@ -89,10 +77,20 @@ final class WorldClockStore: ObservableObject {
         if let data = defaults.data(forKey: Self.storageKey),
            let decoded = try? JSONDecoder().decode([WorldClockEntry].self, from: data) {
             entries = Array(decoded.prefix(Self.maxEntries))
+            sortEntriesInPlace()
+            save()
             return
         }
         entries = Self.defaultEntries()
+        sortEntriesInPlace()
         save()
+    }
+
+    /// Sorts ``entries`` alphabetically by ``WorldClockEntry/displayName`` using locale-aware comparison.
+    private func sortEntriesInPlace() {
+        entries.sort {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
     }
 
     /// Encodes and saves the current entries to UserDefaults.

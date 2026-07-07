@@ -8,8 +8,6 @@ struct CityRowView: View {
     let date: Date
     /// Cached weather for this row, when available.
     let weather: WeatherSnapshot?
-    /// User-selected temperature display unit.
-    let temperatureUnit: TemperatureUnit
 
     /// Resolves the entry's IANA timezone, falling back to the current timezone when invalid.
     private var timeZone: TimeZone {
@@ -52,7 +50,7 @@ struct CityRowView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text(WeatherFormatting.formattedTemperature(celsius: weather.temperatureCelsius, unit: temperatureUnit))
+            Text(WeatherFormatting.formattedBothTemperatures(celsius: weather.temperatureCelsius))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -74,9 +72,8 @@ struct CityRowView: View {
         let offset = TimeFormatting.formattedOffset(fromLocalTo: timeZone, at: date)
         let period = TimeFormatting.isDaytime(in: timeZone, at: date) ? "daytime" : "nighttime"
         if let weather {
-            let temperature = WeatherFormatting.formattedTemperature(
-                celsius: weather.temperatureCelsius,
-                unit: temperatureUnit
+            let temperature = WeatherFormatting.formattedBothTemperaturesAccessibility(
+                celsius: weather.temperatureCelsius
             )
             let condition = WeatherFormatting.conditionDescription(forWeatherCode: weather.weatherCode)
             return "\(entry.displayName), \(temperature), \(condition), \(time), \(offset), \(period)"

@@ -3,20 +3,40 @@ import Foundation
 /// Formats weather temperatures and maps Open-Meteo WMO codes to SF Symbols.
 enum WeatherFormatting {
 
-    /// Formats a Celsius temperature for display in the requested unit.
+    /// Formats a Celsius temperature for display in both metric and imperial units.
     ///
-    /// - Parameters:
-    ///   - celsius: Stored temperature in degrees Celsius.
-    ///   - unit: User-facing display unit.
-    /// - Returns: Rounded integer string such as `"22°C"` or `"72°F"`.
-    static func formattedTemperature(celsius: Double, unit: TemperatureUnit) -> String {
-        switch unit {
-        case .celsius:
-            return "\(Int(celsius.rounded()))°C"
-        case .fahrenheit:
-            let fahrenheit = celsius * 9.0 / 5.0 + 32.0
-            return "\(Int(fahrenheit.rounded()))°F"
-        }
+    /// - Parameter celsius: Stored temperature in degrees Celsius.
+    /// - Returns: Rounded integer string such as `"22°C / 72°F"`.
+    static func formattedBothTemperatures(celsius: Double) -> String {
+        let celsiusRounded = Int(celsius.rounded())
+        let fahrenheitRounded = Int(fahrenheit(fromCelsius: celsius).rounded())
+        return "\(celsiusRounded)°C / \(fahrenheitRounded)°F"
+    }
+
+    /// Returns a VoiceOver-friendly label announcing both Celsius and Fahrenheit values.
+    ///
+    /// - Parameter celsius: Stored temperature in degrees Celsius.
+    /// - Returns: Plain-language string such as `"22 degrees Celsius, 72 degrees Fahrenheit"`.
+    static func formattedBothTemperaturesAccessibility(celsius: Double) -> String {
+        let celsiusRounded = Int(celsius.rounded())
+        let fahrenheitRounded = Int(fahrenheit(fromCelsius: celsius).rounded())
+        return "\(celsiusRounded) degrees Celsius, \(fahrenheitRounded) degrees Fahrenheit"
+    }
+
+    /// Converts Celsius to Fahrenheit using the standard linear formula.
+    ///
+    /// - Parameter celsius: Temperature in degrees Celsius.
+    /// - Returns: Equivalent temperature in degrees Fahrenheit.
+    static func fahrenheit(fromCelsius celsius: Double) -> Double {
+        celsius * 9.0 / 5.0 + 32.0
+    }
+
+    /// Converts Fahrenheit to Celsius using the standard linear formula.
+    ///
+    /// - Parameter fahrenheit: Temperature in degrees Fahrenheit.
+    /// - Returns: Equivalent temperature in degrees Celsius.
+    static func celsius(fromFahrenheit fahrenheit: Double) -> Double {
+        (fahrenheit - 32.0) * 5.0 / 9.0
     }
 
     /// Returns an SF Symbol name for an Open-Meteo WMO weather code.

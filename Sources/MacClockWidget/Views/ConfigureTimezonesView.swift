@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// Inline configure panel for searching, adding, removing, and reordering world clock cities.
+/// Inline configure panel for searching, adding, and removing world clock cities.
 ///
 /// Embedded inside ``ExpandedClockView`` rather than presented as a sheet so that
-/// add/remove/reorder interactions do not dismiss the ``MenuBarExtra`` window.
+/// add/remove interactions do not dismiss the ``MenuBarExtra`` window.
 /// City changes persist immediately via ``WorldClockStore`` so selections survive app restart
 /// even when the panel is closed without tapping Done.
 struct ConfigureTimezonesView: View {
     @ObservedObject var store: WorldClockStore
-    @ObservedObject var temperatureUnit: TemperatureUnitPreferences
 
     /// Called when the user cancels or finishes, returning to the world-clock list.
     var onDismiss: () -> Void
@@ -44,7 +43,7 @@ struct ConfigureTimezonesView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// List of currently selected cities with reorder, swipe-delete, and per-row remove buttons.
+    /// List of currently selected cities (alphabetical by name) with swipe-delete and per-row remove buttons.
     private var selectedSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -69,7 +68,6 @@ struct ConfigureTimezonesView: View {
                     ForEach(store.entries) { entry in
                         selectedRow(entry)
                     }
-                    .onMove(perform: moveEntries)
                     .onDelete(perform: deleteEntries)
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
@@ -183,10 +181,9 @@ struct ConfigureTimezonesView: View {
         }
     }
 
-    /// Footer with temperature units, launch-at-login toggle, backup actions, cancel, and done.
+    /// Footer with launch-at-login toggle, backup actions, cancel, and done.
     private var footer: some View {
         VStack(spacing: 8) {
-            temperatureUnitPicker
             launchAtLoginToggle
             backupControls
             openMeteoAttribution
@@ -231,26 +228,6 @@ struct ConfigureTimezonesView: View {
                     .font(.caption2)
                     .foregroundStyle(backupMessageIsError ? Color.red : Color.secondary)
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Segmented picker for Celsius or Fahrenheit temperature display.
-    private var temperatureUnitPicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Temperature units")
-                .font(.subheadline)
-            Picker("Temperature units", selection: Binding(
-                get: { temperatureUnit.unit },
-                set: { temperatureUnit.setUnit($0) }
-            )) {
-                ForEach(TemperatureUnit.allCases) { unit in
-                    Text(unit.pickerLabel).tag(unit)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel("Temperature units")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -307,17 +284,6 @@ struct ConfigureTimezonesView: View {
     private func deleteEntries(at offsets: IndexSet) {
         let ids = Set(offsets.map { store.entries[$0].id })
         store.remove(ids: ids)
-    }
-
-    /// Reorders persisted entries via drag-and-drop.
-    ///
-    /// - Parameters:
-    ///   - source: Source indices from the list.
-    ///   - destination: Destination index from the list.
-    private func moveEntries(from source: IndexSet, to destination: Int) {
-        var entries = store.entries
-        entries.move(fromOffsets: source, toOffset: destination)
-        store.setEntries(entries)
     }
 
     /// Writes the current city list to a user-chosen JSON file via the system save panel.

@@ -4,7 +4,6 @@ import SwiftUI
 struct ExpandedClockView: View {
     @StateObject private var store = WorldClockStore()
     @StateObject private var weatherService = WeatherService()
-    @StateObject private var temperatureUnit = TemperatureUnitPreferences()
     @State private var isShowingConfigure = false
 
     private let panelWidth: CGFloat = 380
@@ -15,7 +14,6 @@ struct ExpandedClockView: View {
             if isShowingConfigure {
                 ConfigureTimezonesView(
                     store: store,
-                    temperatureUnit: temperatureUnit,
                     onDismiss: closeConfigure
                 )
             } else {
@@ -72,8 +70,7 @@ struct ExpandedClockView: View {
                         CityRowView(
                             entry: entry,
                             date: context.date,
-                            weather: weatherService.snapshot(for: entry.id),
-                            temperatureUnit: temperatureUnit.unit
+                            weather: weatherService.snapshot(for: entry.id)
                         )
                     }
                 }
@@ -97,10 +94,13 @@ struct ExpandedClockView: View {
         .padding(.vertical, 24)
     }
 
-    /// Footer with configure entry point.
+    /// Footer with temperature converter and configure entry point.
     private var panelFooter: some View {
-        configureButton
-            .padding(.top, 8)
+        VStack(spacing: 8) {
+            TemperatureConverterView()
+            configureButton
+        }
+        .padding(.top, 8)
     }
 
     /// Opens the inline timezone configuration panel.
